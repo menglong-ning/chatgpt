@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "882512b625e3c494cc90a91230a374a2"
-application_url = "https://digxipop-fulfillment-app.onrender.com"
+application_url = "https://chatgpt-gma6.onrender.com"
 embedded = true
 name = "fulfillment-app"
 
@@ -21,7 +21,7 @@ api_version = "2026-04"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://digxipop-fulfillment-app.onrender.com/auth/callback" ]
+redirect_urls = [ "https://chatgpt-gma6.onrender.com/auth/callback" ]
 
 [build]
 include_config_on_deploy = true
