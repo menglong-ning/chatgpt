@@ -1,0 +1,20 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "9a9121223ec01169b8e05606cf6b8ad8"
+name = "fulfillment-app"
+application_url = "http://localhost:3000"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2026-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_assigned_fulfillment_orders,read_customers,read_fulfillments,read_merchant_managed_fulfillment_orders,read_orders,write_assigned_fulfillment_orders,write_fulfillments,write_merchant_managed_fulfillment_orders"
+
+[auth]
+redirect_urls = [ "http://localhost:3000/api/auth" ]
