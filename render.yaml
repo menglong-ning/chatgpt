@@ -1,9 +1,9 @@
 services:
   - type: web
     runtime: docker
-    name: digxipop-fulfillment-app
-    region: singapore
-    plan: starter
+    name: chatgpt
+    region: oregon
+    plan: free
     autoDeployTrigger: commit
     healthCheckPath: /
     envVars:
@@ -12,7 +12,7 @@ services:
       - key: PORT
         value: "3000"
       - key: SHOPIFY_APP_URL
-        value: https://digxipop-fulfillment-app.onrender.com
+        value: https://chatgpt-gma6.onrender.com
       - key: SHOPIFY_API_KEY
         value: 882512b625e3c494cc90a91230a374a2
       - key: SHOPIFY_API_SECRET
@@ -21,12 +21,10 @@ services:
         value: read_orders,read_customers,read_fulfillments,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders
       - key: DATABASE_URL
         fromDatabase:
-          name: digxipop-fulfillment-db
+          name: shopify-3
           property: connectionString
 
 databases:
-  - name: digxipop-fulfillment-db
-    region: singapore
-    plan: basic-256mb
-    databaseName: digxipop_fulfillment
-    user: digxipop_fulfillment
+  - name: shopify-3
+    region: oregon
+    plan: free
