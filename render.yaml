@@ -14,7 +14,7 @@ services:
       - key: SHOPIFY_APP_URL
         value: https://chatgpt-gma6.onrender.com
       - key: SHOPIFY_API_KEY
-        value: 882512b625e3c494cc90a91230a374a2
+        value: 9a9121223ec01169b8e05606cf6b8ad8
       - key: SHOPIFY_API_SECRET
         sync: false
       - key: SCOPES
