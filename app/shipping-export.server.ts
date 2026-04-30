@@ -1,4 +1,6 @@
 const EXPORT_COLUMN_COUNT = 42;
+const ORDERS_PAGE_SIZE = 250;
+const SHIPPING_ORDER_QUERY = "status:any financial_status:paid fulfillment_status:unfulfilled";
 
 type ShopifyAdmin = {
   graphql: (query: string, options?: any) => Promise<Response>;
@@ -210,20 +212,69 @@ function toShippingOrder(order: RawOrder): ShippingOrder {
 }
 
 export async function getShippingOrders(admin: ShopifyAdmin) {
-  const response = await admin.graphql(
-    `query GetOrdersForShippingExport {
-      orders(first: 100, query: "status:any fulfillment_status:unshipped", reverse: true, sortKey: CREATED_AT) {
-        edges {
-          node {
-            id
-            name
-            createdAt
-            cancelledAt
-            displayFulfillmentStatus
-            phone
-            customer {
+  const orders: RawOrder[] = [];
+  let cursor: string | null = null;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const response = await admin.graphql(
+      `query GetOrdersForShippingExport($after: String) {
+        orders(
+          first: ${ORDERS_PAGE_SIZE},
+          after: $after,
+          query: "${SHIPPING_ORDER_QUERY}",
+          reverse: true,
+          sortKey: CREATED_AT
+        ) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          edges {
+            node {
+              id
+              name
+              createdAt
+              cancelledAt
+              displayFulfillmentStatus
               phone
-              defaultAddress {
+              customer {
+                phone
+                defaultAddress {
+                  name
+                  address1
+                  address2
+                  city
+                  province
+                  provinceCode
+                  zip
+                  phone
+                  country
+                }
+              }
+              shippingAddress {
+                name
+                address1
+                address2
+                city
+                province
+                provinceCode
+                zip
+                phone
+                country
+              }
+              displayAddress {
+                name
+                address1
+                address2
+                city
+                province
+                provinceCode
+                zip
+                phone
+                country
+              }
+              billingAddress {
                 name
                 address1
                 address2
@@ -235,47 +286,31 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
                 country
               }
             }
-            shippingAddress {
-              name
-              address1
-              address2
-              city
-              province
-              provinceCode
-              zip
-              phone
-              country
-            }
-            displayAddress {
-              name
-              address1
-              address2
-              city
-              province
-              provinceCode
-              zip
-              phone
-              country
-            }
-            billingAddress {
-              name
-              address1
-              address2
-              city
-              province
-              provinceCode
-              zip
-              phone
-              country
-            }
           }
         }
-      }
-    }`,
-  );
+      }`,
+      { variables: { after: cursor } },
+    );
 
-  const { data } = await response.json();
-  const orders = data?.orders?.edges?.map((edge: any) => edge.node) || [];
+    const { data, errors } = await response.json();
+    if (errors?.length) {
+      throw new Error(
+        `Failed to load shipping orders: ${errors
+          .map((error: any) => error.message)
+          .join(", ")}`,
+      );
+    }
+
+    const page = data?.orders;
+    orders.push(...(page?.edges?.map((edge: any) => edge.node) || []));
+
+    hasNextPage = Boolean(page?.pageInfo?.hasNextPage);
+    cursor = page?.pageInfo?.endCursor || null;
+
+    if (hasNextPage && !cursor) {
+      throw new Error("Failed to load shipping orders: missing pagination cursor");
+    }
+  }
 
   return orders.filter(shouldExportOrder).map(toShippingOrder);
 }
