@@ -36,6 +36,8 @@ type RawOrder = {
 };
 
 type MailingAddress = {
+  firstName?: string | null;
+  lastName?: string | null;
   name?: string | null;
   address1?: string | null;
   address2?: string | null;
@@ -134,6 +136,14 @@ function normalizeProvince(address: MailingAddress) {
   return address.province || "";
 }
 
+function formatRecipientName(address: MailingAddress) {
+  const surname = (address.lastName || "").trim();
+  const givenName = (address.firstName || "").trim();
+  const surnameFirstName = [surname, givenName].filter(Boolean).join(" ");
+
+  return surnameFirstName || address.name || "";
+}
+
 function splitAddress(value: string) {
   const chars = Array.from(value);
   return {
@@ -166,7 +176,7 @@ function addressScore(address?: MailingAddress | null) {
   if (!address) return 0;
 
   return [
-    address.name,
+    formatRecipientName(address),
     address.phone,
     address.zip,
     normalizeProvince(address),
@@ -202,7 +212,7 @@ function toShippingOrder(order: RawOrder): ShippingOrder {
     name: order.name,
     createdAt: order.createdAt,
     displayFulfillmentStatus: order.displayFulfillmentStatus || "UNKNOWN",
-    shippingName: address.name || "",
+    shippingName: formatRecipientName(address),
     shippingCountry: address.country || "",
     phone: normalizePhone(address.phone || order.phone || order.customer?.phone || order.customer?.defaultAddress?.phone),
     zip: normalizeZip(address.zip),
@@ -241,6 +251,8 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
               customer {
                 phone
                 defaultAddress {
+                  firstName
+                  lastName
                   name
                   address1
                   address2
@@ -253,6 +265,8 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
                 }
               }
               shippingAddress {
+                firstName
+                lastName
                 name
                 address1
                 address2
@@ -264,6 +278,8 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
                 country
               }
               displayAddress {
+                firstName
+                lastName
                 name
                 address1
                 address2
@@ -275,6 +291,8 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
                 country
               }
               billingAddress {
+                firstName
+                lastName
                 name
                 address1
                 address2
