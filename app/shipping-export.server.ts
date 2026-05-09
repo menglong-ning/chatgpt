@@ -145,11 +145,31 @@ function formatRecipientName(address: MailingAddress) {
   return surnameFirstName || address.name || "";
 }
 
+function isAddressNumberChar(value?: string) {
+  return Boolean(value && /^[0-9０-９\-－−ー‐‑‒–—―]+$/.test(value));
+}
+
+function getAddressSplitIndex(chars: string[]) {
+  let splitIndex = Math.min(ADDRESS_COLUMN_CHAR_LIMIT, chars.length);
+
+  if (splitIndex >= chars.length || !isAddressNumberChar(chars[splitIndex])) {
+    return splitIndex;
+  }
+
+  while (splitIndex > 0 && isAddressNumberChar(chars[splitIndex - 1])) {
+    splitIndex -= 1;
+  }
+
+  return Math.max(1, splitIndex - 1);
+}
+
 function splitAddress(value: string) {
   const chars = Array.from(value);
+  const splitIndex = getAddressSplitIndex(chars);
+
   return {
-    addressLine1: chars.slice(0, ADDRESS_COLUMN_CHAR_LIMIT).join(""),
-    addressLine2: chars.slice(ADDRESS_COLUMN_CHAR_LIMIT).join(""),
+    addressLine1: chars.slice(0, splitIndex).join(""),
+    addressLine2: chars.slice(splitIndex).join(""),
   };
 }
 
