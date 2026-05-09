@@ -1,5 +1,6 @@
 const EXPORT_COLUMN_COUNT = 42;
 const ORDERS_PAGE_SIZE = 250;
+const ADDRESS_COLUMN_CHAR_LIMIT = 16;
 const SHIPPING_ORDER_QUERY = "status:any financial_status:paid fulfillment_status:unfulfilled";
 
 type ShopifyAdmin = {
@@ -147,8 +148,8 @@ function formatRecipientName(address: MailingAddress) {
 function splitAddress(value: string) {
   const chars = Array.from(value);
   return {
-    addressLine1: chars.slice(0, 32).join(""),
-    addressLine2: chars.slice(32).join(""),
+    addressLine1: chars.slice(0, ADDRESS_COLUMN_CHAR_LIMIT).join(""),
+    addressLine2: chars.slice(ADDRESS_COLUMN_CHAR_LIMIT).join(""),
   };
 }
 
@@ -345,7 +346,7 @@ export function buildShippingCsv(orders: ShippingOrder[]) {
     row[4] = shipDate; // E: 出荷予定日
     row[8] = order.phone; // I: 电话号码
     row[10] = order.zip; // K: 邮编
-    row[11] = order.addressLine1; // L: 地址，32文字以内
+    row[11] = order.addressLine1; // L: 地址，16文字以内
     row[12] = order.addressLine2; // M: 超出 L 的地址
     row[15] = order.shippingName; // P: 客户姓名
     row[17] = "様"; // R: 敬称
