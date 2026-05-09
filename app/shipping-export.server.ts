@@ -145,8 +145,37 @@ function formatRecipientName(address: MailingAddress) {
   return surnameFirstName || address.name || "";
 }
 
+function normalizeAddressPart(value?: string | null) {
+  return (value || "").trim();
+}
+
+function joinAddressParts(parts: Array<string | null | undefined>) {
+  return parts.map(normalizeAddressPart).filter(Boolean).join("");
+}
+
 function isAddressNumberChar(value?: string) {
   return Boolean(value && /^[0-9０-９\-－−ー‐‑‒–—―]+$/.test(value));
+}
+
+function hasStreetNumberSuffix(value: string) {
+  return /[0-9０-９][0-9０-９\-－−ー‐‑‒–—―]*$/.test(value.trim());
+}
+
+function getBuildingNameSplitIndex(value: string) {
+  const chars = Array.from(value);
+
+  for (let index = 0; index < chars.length; index += 1) {
+    if (!/\s/.test(chars[index])) continue;
+
+    const street = chars.slice(0, index).join("").trim();
+    const building = chars.slice(index + 1).join("").trim();
+
+    if (street && building && hasStreetNumberSuffix(street)) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function getAddressSplitIndex(chars: string[]) {
@@ -163,8 +192,28 @@ function getAddressSplitIndex(chars: string[]) {
   return Math.max(1, splitIndex - 1);
 }
 
-function splitAddress(value: string) {
-  const chars = Array.from(value);
+function splitAddress(streetAddress: string, buildingName?: string | null) {
+  const street = normalizeAddressPart(streetAddress);
+  const building = normalizeAddressPart(buildingName);
+
+  if (building) {
+    return {
+      addressLine1: street,
+      addressLine2: building,
+    };
+  }
+
+  const buildingSplitIndex = getBuildingNameSplitIndex(street);
+  if (buildingSplitIndex >= 0) {
+    const chars = Array.from(street);
+
+    return {
+      addressLine1: chars.slice(0, buildingSplitIndex).join("").trim(),
+      addressLine2: chars.slice(buildingSplitIndex + 1).join("").trim(),
+    };
+  }
+
+  const chars = Array.from(street);
   const splitIndex = getAddressSplitIndex(chars);
 
   return {
@@ -218,15 +267,12 @@ function getBestAddress(order: RawOrder) {
 
 function toShippingOrder(order: RawOrder): ShippingOrder {
   const address = getBestAddress(order);
-  const fullAddress = [
+  const streetAddress = joinAddressParts([
     normalizeProvince(address),
     address.city,
     address.address1,
-    address.address2,
-  ]
-    .filter(Boolean)
-    .join("");
-  const split = splitAddress(fullAddress);
+  ]);
+  const split = splitAddress(streetAddress, address.address2);
 
   return {
     id: order.id,
@@ -366,8 +412,8 @@ export function buildShippingCsv(orders: ShippingOrder[]) {
     row[4] = shipDate; // E: 出荷予定日
     row[8] = order.phone; // I: 电话号码
     row[10] = order.zip; // K: 邮编
-    row[11] = order.addressLine1; // L: 地址，16文字以内
-    row[12] = order.addressLine2; // M: 超出 L 的地址
+    row[11] = order.addressLine1; // L: 住所・丁目番地
+    row[12] = order.addressLine2; // M: 建物名・部屋番号 or overflow
     row[15] = order.shippingName; // P: 客户姓名
     row[17] = "様"; // R: 敬称
     row[19] = "06-4256-0501"; // T: ご依頼主電話番号
