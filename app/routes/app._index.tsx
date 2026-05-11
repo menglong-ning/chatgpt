@@ -12,7 +12,8 @@ import {
   Checkbox,
   Text,
   InlineStack,
-  EmptyState
+  EmptyState,
+  TextField,
 } from "@shopify/polaris";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -21,15 +22,49 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { orders };
 };
 
+function normalizeDigits(value: string) {
+  return value.replace(/[０-９]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0xfee0),
+  );
+}
+
+function normalizeOrderName(value: string) {
+  const trimmed = normalizeDigits(value).trim();
+  if (!trimmed) return "";
+
+  const withoutHash = trimmed.replace(/^#+/, "");
+  return withoutHash ? `#${withoutHash}` : "";
+}
+
+function parseOrderNames(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\s,，、;；]+/)
+        .map(normalizeOrderName)
+        .filter(Boolean),
+    ),
+  );
+}
+
 export default function Index() {
   const { orders } = useLoaderData<typeof loader>();
   const location = useLocation();
   const [isExporting, setIsExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [orderInput, setOrderInput] = useState("");
+  const [matchedIds, setMatchedIds] = useState<string[]>([]);
+  const [missingOrderNames, setMissingOrderNames] = useState<string[]>([]);
+  const [hasMatched, setHasMatched] = useState(false);
 
   const selectedIdSet = new Set(selectedIds);
   const allSelected = orders.length > 0 && selectedIds.length === orders.length;
   const exportCount = selectedIds.length || orders.length;
+  const canUseMatchedOrders = hasMatched && matchedIds.length > 0;
+
+  const ordersByName = new Map(
+    orders.map((order: any) => [normalizeOrderName(order.name), order]),
+  );
 
   const toggleOrder = (id: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -42,12 +77,40 @@ export default function Index() {
     setSelectedIds(checked ? orders.map((order: any) => order.id) : []);
   };
 
-  const handleExport = async () => {
+  const matchOrders = () => {
+    const requestedNames = parseOrderNames(orderInput);
+    const foundIds: string[] = [];
+    const missingNames: string[] = [];
+    const seenIds = new Set<string>();
+
+    for (const name of requestedNames) {
+      const order = ordersByName.get(name);
+      if (!order) {
+        missingNames.push(name);
+        continue;
+      }
+
+      if (!seenIds.has(order.id)) {
+        foundIds.push(order.id);
+        seenIds.add(order.id);
+      }
+    }
+
+    setMatchedIds(foundIds);
+    setMissingOrderNames(missingNames);
+    setHasMatched(true);
+  };
+
+  const selectMatchedOrders = () => {
+    setSelectedIds(matchedIds);
+  };
+
+  const exportOrders = async (ids: string[]) => {
     setIsExporting(true);
 
     try {
       const params = new URLSearchParams(location.search);
-      selectedIds.forEach((id) => params.append("ids", id));
+      ids.forEach((id) => params.append("ids", id));
       const query = params.toString();
       const response = await fetch(`/app/export${query ? `?${query}` : ""}`);
       if (!response.ok) throw new Error("Export failed");
@@ -65,6 +128,15 @@ export default function Index() {
       setIsExporting(false);
     }
   };
+
+  const handleExport = async () => {
+    await exportOrders(selectedIds);
+  };
+
+  const handleExportMatched = async () => {
+    await exportOrders(matchedIds);
+  };
+
   return (
     <Page title="Fulfillment Manager">
       <Layout>
@@ -84,6 +156,47 @@ export default function Index() {
                   </Button>
                 </InlineStack>
               </InlineStack>
+
+              <BlockStack gap="300">
+                <Text as="h3" variant="headingMd">
+                  订单号匹配
+                </Text>
+                <TextField
+                  label="订单号"
+                  labelHidden
+                  value={orderInput}
+                  onChange={setOrderInput}
+                  placeholder="1057, 1092, #1122"
+                  autoComplete="off"
+                  multiline={3}
+                />
+                <InlineStack gap="300" wrap>
+                  <Button onClick={matchOrders}>匹配订单</Button>
+                  <Button onClick={selectMatchedOrders} disabled={!canUseMatchedOrders}>
+                    全选找到的订单
+                  </Button>
+                  <Button
+                    onClick={handleExportMatched}
+                    disabled={!canUseMatchedOrders}
+                    loading={isExporting}
+                  >
+                    导出匹配到的订单
+                  </Button>
+                </InlineStack>
+                {hasMatched && (
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodyMd">
+                      找到 {matchedIds.length} 个，没找到 {missingOrderNames.length} 个
+                    </Text>
+                    {missingOrderNames.length > 0 && (
+                      <Text as="p" variant="bodyMd">
+                        没找到：{missingOrderNames.join(", ")}
+                      </Text>
+                    )}
+                  </BlockStack>
+                )}
+              </BlockStack>
+
               {orders.length === 0 ? (
                 <EmptyState
                   heading="No unfulfilled orders found"
