@@ -29,11 +29,8 @@ type RawOrder = {
   phone?: string | null;
   customer?: {
     phone?: string | null;
-    defaultAddress?: MailingAddress | null;
   } | null;
   shippingAddress?: MailingAddress | null;
-  displayAddress?: MailingAddress | null;
-  billingAddress?: MailingAddress | null;
 };
 
 type MailingAddress = {
@@ -242,31 +239,12 @@ function shouldExportOrder(order: RawOrder) {
   return true;
 }
 
-function addressScore(address?: MailingAddress | null) {
-  if (!address) return 0;
-
-  return [
-    formatRecipientName(address),
-    address.phone,
-    address.zip,
-    normalizeProvince(address),
-    address.city,
-    address.address1,
-    address.address2,
-  ].filter(Boolean).length;
-}
-
-function getBestAddress(order: RawOrder) {
-  return [
-    order.shippingAddress,
-    order.displayAddress,
-    order.billingAddress,
-    order.customer?.defaultAddress,
-  ].sort((a, b) => addressScore(b) - addressScore(a))[0] || {};
+function getShippingAddress(order: RawOrder): MailingAddress {
+  return order.shippingAddress || {};
 }
 
 function toShippingOrder(order: RawOrder): ShippingOrder {
-  const address = getBestAddress(order);
+  const address = getShippingAddress(order);
   const streetAddress = joinAddressParts([
     normalizeProvince(address),
     address.city,
@@ -281,7 +259,7 @@ function toShippingOrder(order: RawOrder): ShippingOrder {
     displayFulfillmentStatus: order.displayFulfillmentStatus || "UNKNOWN",
     shippingName: formatRecipientName(address),
     shippingCountry: address.country || "",
-    phone: normalizePhone(address.phone || order.phone || order.customer?.phone || order.customer?.defaultAddress?.phone),
+    phone: normalizePhone(address.phone || order.phone || order.customer?.phone),
     zip: normalizeZip(address.zip),
     addressLine1: split.addressLine1,
     addressLine2: split.addressLine2,
@@ -317,47 +295,8 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
               phone
               customer {
                 phone
-                defaultAddress {
-                  firstName
-                  lastName
-                  name
-                  address1
-                  address2
-                  city
-                  province
-                  provinceCode
-                  zip
-                  phone
-                  country
-                }
               }
               shippingAddress {
-                firstName
-                lastName
-                name
-                address1
-                address2
-                city
-                province
-                provinceCode
-                zip
-                phone
-                country
-              }
-              displayAddress {
-                firstName
-                lastName
-                name
-                address1
-                address2
-                city
-                province
-                provinceCode
-                zip
-                phone
-                country
-              }
-              billingAddress {
                 firstName
                 lastName
                 name
