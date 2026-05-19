@@ -31,6 +31,7 @@ type RawOrder = {
     phone?: string | null;
   } | null;
   shippingAddress?: MailingAddress | null;
+  billingAddress?: MailingAddress | null;
 };
 
 type MailingAddress = {
@@ -150,6 +151,19 @@ function joinAddressParts(parts: Array<string | null | undefined>) {
   return parts.map(normalizeAddressPart).filter(Boolean).join("");
 }
 
+function hasAddressDetails(address?: MailingAddress | null) {
+  if (!address) return false;
+
+  return [
+    address.zip,
+    address.province,
+    address.provinceCode,
+    address.city,
+    address.address1,
+    address.address2,
+  ].some((value) => normalizeAddressPart(value));
+}
+
 function isAddressNumberChar(value?: string) {
   return Boolean(value && /^[0-9０-９\-－−ー‐‑‒–—―]+$/.test(value));
 }
@@ -239,12 +253,16 @@ function shouldExportOrder(order: RawOrder) {
   return true;
 }
 
-function getShippingAddress(order: RawOrder): MailingAddress {
-  return order.shippingAddress || {};
+function getLabelAddress(order: RawOrder): MailingAddress {
+  if (hasAddressDetails(order.shippingAddress)) {
+    return order.shippingAddress || {};
+  }
+
+  return order.billingAddress || {};
 }
 
 function toShippingOrder(order: RawOrder): ShippingOrder {
-  const address = getShippingAddress(order);
+  const address = getLabelAddress(order);
   const streetAddress = joinAddressParts([
     normalizeProvince(address),
     address.city,
@@ -297,6 +315,19 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
                 phone
               }
               shippingAddress {
+                firstName
+                lastName
+                name
+                address1
+                address2
+                city
+                province
+                provinceCode
+                zip
+                phone
+                country
+              }
+              billingAddress {
                 firstName
                 lastName
                 name
