@@ -1,7 +1,7 @@
 const EXPORT_COLUMN_COUNT = 42;
 const ORDERS_PAGE_SIZE = 250;
 const ADDRESS_COLUMN_CHAR_LIMIT = 16;
-const SHIPPING_ORDER_QUERY = "status:any financial_status:paid fulfillment_status:unfulfilled";
+const SHIPPING_ORDER_QUERY = "status:any (financial_status:paid OR financial_status:partially_refunded) fulfillment_status:unfulfilled";
 
 type ShopifyAdmin = {
   graphql: (query: string, options?: any) => Promise<Response>;
