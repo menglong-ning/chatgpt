@@ -1,7 +1,7 @@
 const EXPORT_COLUMN_COUNT = 42;
 const ORDERS_PAGE_SIZE = 250;
 const ADDRESS_COLUMN_CHAR_LIMIT = 16;
-const SHIPPING_ORDER_QUERY = "status:any (financial_status:paid OR financial_status:partially_refunded) fulfillment_status:unfulfilled";
+const SHIPPING_ORDER_QUERY = "status:any fulfillment_status:unfulfilled";
 
 type ShopifyAdmin = {
   graphql: (query: string, options?: any) => Promise<Response>;
@@ -291,11 +291,11 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
 
   while (hasNextPage) {
     const response = await admin.graphql(
-      `query GetOrdersForShippingExport($after: String) {
+      `query GetOrdersForShippingExport($first: Int!, $after: String, $query: String!) {
         orders(
-          first: ${ORDERS_PAGE_SIZE},
+          first: $first,
           after: $after,
-          query: "${SHIPPING_ORDER_QUERY}",
+          query: $query,
           reverse: true,
           sortKey: CREATED_AT
         ) {
@@ -344,7 +344,13 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
           }
         }
       }`,
-      { variables: { after: cursor } },
+      {
+        variables: {
+          first: ORDERS_PAGE_SIZE,
+          after: cursor,
+          query: SHIPPING_ORDER_QUERY,
+        },
+      },
     );
 
     const { data, errors } = await response.json();
