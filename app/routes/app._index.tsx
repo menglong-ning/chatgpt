@@ -56,15 +56,13 @@ export default function Index() {
   const [matchedIds, setMatchedIds] = useState<string[]>([]);
   const [missingOrderNames, setMissingOrderNames] = useState<string[]>([]);
   const [hasMatched, setHasMatched] = useState(false);
+  const [isMatching, setIsMatching] = useState(false);
+  const [matchError, setMatchError] = useState("");
 
   const selectedIdSet = new Set(selectedIds);
   const allSelected = orders.length > 0 && selectedIds.length === orders.length;
   const exportCount = selectedIds.length || orders.length;
   const canUseMatchedOrders = hasMatched && matchedIds.length > 0;
-
-  const ordersByName = new Map(
-    orders.map((order: any) => [normalizeOrderName(order.name), order]),
-  );
 
   const toggleOrder = (id: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -77,28 +75,45 @@ export default function Index() {
     setSelectedIds(checked ? orders.map((order: any) => order.id) : []);
   };
 
-  const matchOrders = () => {
+  const matchOrders = async () => {
     const requestedNames = parseOrderNames(orderInput);
-    const foundIds: string[] = [];
-    const missingNames: string[] = [];
-    const seenIds = new Set<string>();
 
-    for (const name of requestedNames) {
-      const order = ordersByName.get(name);
-      if (!order) {
-        missingNames.push(name);
-        continue;
-      }
-
-      if (!seenIds.has(order.id)) {
-        foundIds.push(order.id);
-        seenIds.add(order.id);
-      }
+    if (requestedNames.length === 0) {
+      setMatchedIds([]);
+      setMissingOrderNames([]);
+      setMatchError("");
+      setHasMatched(false);
+      return;
     }
 
-    setMatchedIds(foundIds);
-    setMissingOrderNames(missingNames);
-    setHasMatched(true);
+    setIsMatching(true);
+    setMatchError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("names", JSON.stringify(requestedNames));
+
+      const params = new URLSearchParams(location.search);
+      const query = params.toString();
+      const response = await fetch(`/app/match${query ? `?${query}` : ""}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Match failed");
+
+      const result = await response.json();
+      setMatchedIds(result.orders?.map((order: any) => order.id) || []);
+      setMissingOrderNames(result.missingOrderNames || []);
+      setHasMatched(true);
+    } catch {
+      setMatchedIds([]);
+      setMissingOrderNames(requestedNames);
+      setMatchError("匹配失败，请刷新后再试。");
+      setHasMatched(true);
+    } finally {
+      setIsMatching(false);
+    }
   };
 
   const selectMatchedOrders = () => {
@@ -171,7 +186,13 @@ export default function Index() {
                   multiline={3}
                 />
                 <InlineStack gap="300" wrap>
-                  <Button onClick={matchOrders}>匹配订单</Button>
+                  <Button
+                    onClick={matchOrders}
+                    loading={isMatching}
+                    disabled={isMatching}
+                  >
+                    匹配订单
+                  </Button>
                   <Button onClick={selectMatchedOrders} disabled={!canUseMatchedOrders}>
                     全选找到的订单
                   </Button>
@@ -188,6 +209,11 @@ export default function Index() {
                     <Text as="p" variant="bodyMd">
                       找到 {matchedIds.length} 个，没找到 {missingOrderNames.length} 个
                     </Text>
+                    {matchError && (
+                      <Text as="p" variant="bodyMd">
+                        {matchError}
+                      </Text>
+                    )}
                     {missingOrderNames.length > 0 && (
                       <Text as="p" variant="bodyMd">
                         没找到：{missingOrderNames.join(", ")}

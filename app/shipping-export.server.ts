@@ -1,5 +1,7 @@
 const EXPORT_COLUMN_COUNT = 42;
 const ORDERS_PAGE_SIZE = 250;
+const ORDER_NAME_QUERY_CHUNK_SIZE = 50;
+const ORDER_ID_QUERY_CHUNK_SIZE = 250;
 const ADDRESS_COLUMN_CHAR_LIMIT = 16;
 const SHIPPING_ORDER_QUERY = "status:any fulfillment_status:unfulfilled";
 
@@ -253,6 +255,44 @@ function shouldExportOrder(order: RawOrder) {
   return true;
 }
 
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values));
+}
+
+function chunkValues<T>(values: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+export function normalizeShippingOrderName(value: string) {
+  const trimmed = value
+    .replace(/[０-９]/g, (char) =>
+      String.fromCharCode(char.charCodeAt(0) - 0xfee0),
+    )
+    .trim();
+  if (!trimmed) return "";
+
+  const withoutHash = trimmed.replace(/^#+/, "");
+  return withoutHash ? `#${withoutHash}` : "";
+}
+
+function buildOrderNamesQuery(orderNames: string[]) {
+  const terms = orderNames
+    .map(normalizeShippingOrderName)
+    .filter(Boolean)
+    .map((name) => `name:${name.replace(/[()]/g, "")}`);
+
+  if (terms.length === 0) return "";
+  if (terms.length === 1) return `status:any ${terms[0]}`;
+
+  return `status:any (${terms.join(" OR ")})`;
+}
+
 function getLabelAddress(order: RawOrder): MailingAddress {
   if (hasAddressDetails(order.shippingAddress)) {
     return order.shippingAddress || {};
@@ -284,7 +324,7 @@ function toShippingOrder(order: RawOrder): ShippingOrder {
   };
 }
 
-export async function getShippingOrders(admin: ShopifyAdmin) {
+async function getRawOrdersByQuery(admin: ShopifyAdmin, query: string) {
   const orders: RawOrder[] = [];
   let cursor: string | null = null;
   let hasNextPage = true;
@@ -348,7 +388,7 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
         variables: {
           first: ORDERS_PAGE_SIZE,
           after: cursor,
-          query: SHIPPING_ORDER_QUERY,
+          query,
         },
       },
     );
@@ -371,6 +411,105 @@ export async function getShippingOrders(admin: ShopifyAdmin) {
     if (hasNextPage && !cursor) {
       throw new Error("Failed to load shipping orders: missing pagination cursor");
     }
+  }
+
+  return orders;
+}
+
+export async function getShippingOrders(admin: ShopifyAdmin) {
+  const orders = await getRawOrdersByQuery(admin, SHIPPING_ORDER_QUERY);
+
+  return orders.filter(shouldExportOrder).map(toShippingOrder);
+}
+
+export async function getShippingOrdersByNames(
+  admin: ShopifyAdmin,
+  orderNames: string[],
+) {
+  const normalizedOrderNames = uniqueValues(
+    orderNames.map(normalizeShippingOrderName).filter(Boolean),
+  );
+  const orders: ShippingOrder[] = [];
+
+  for (const chunk of chunkValues(normalizedOrderNames, ORDER_NAME_QUERY_CHUNK_SIZE)) {
+    const query = buildOrderNamesQuery(chunk);
+    if (!query) continue;
+
+    const rawOrders = await getRawOrdersByQuery(admin, query);
+    orders.push(...rawOrders.filter(shouldExportOrder).map(toShippingOrder));
+  }
+
+  const ordersByName = new Map(
+    orders.map((order) => [normalizeShippingOrderName(order.name), order]),
+  );
+
+  return normalizedOrderNames
+    .map((name) => ordersByName.get(name))
+    .filter((order): order is ShippingOrder => Boolean(order));
+}
+
+export async function getShippingOrdersByIds(
+  admin: ShopifyAdmin,
+  orderIds: string[],
+) {
+  const orders: RawOrder[] = [];
+
+  for (const chunk of chunkValues(uniqueValues(orderIds), ORDER_ID_QUERY_CHUNK_SIZE)) {
+    const response = await admin.graphql(
+      `query GetOrdersByIds($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Order {
+            id
+            name
+            createdAt
+            cancelledAt
+            displayFulfillmentStatus
+            phone
+            customer {
+              phone
+            }
+            shippingAddress {
+              firstName
+              lastName
+              name
+              address1
+              address2
+              city
+              province
+              provinceCode
+              zip
+              phone
+              country
+            }
+            billingAddress {
+              firstName
+              lastName
+              name
+              address1
+              address2
+              city
+              province
+              provinceCode
+              zip
+              phone
+              country
+            }
+          }
+        }
+      }`,
+      { variables: { ids: chunk } },
+    );
+
+    const { data, errors } = await response.json();
+    if (errors?.length) {
+      throw new Error(
+        `Failed to load selected orders: ${errors
+          .map((error: any) => error.message)
+          .join(", ")}`,
+      );
+    }
+
+    orders.push(...(data?.nodes?.filter(Boolean) || []));
   }
 
   return orders.filter(shouldExportOrder).map(toShippingOrder);
