@@ -1,5 +1,5 @@
 import { authenticate } from "../shopify.server";
-import { ActionFunctionArgs } from "@remix-run/node";
+import type { ActionFunctionArgs } from "@remix-run/node";
 import { useActionData, useSubmit, useNavigation } from "@remix-run/react";
 import {
   Page,
@@ -9,7 +9,6 @@ import {
   BlockStack,
   Text,
   DropZone,
-  Banner,
   List,
   LegacyStack,
   Thumbnail,

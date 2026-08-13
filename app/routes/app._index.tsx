@@ -1,5 +1,5 @@
 import { authenticate } from "../shopify.server";
-import { LoaderFunctionArgs } from "@remix-run/node";
+import type { LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useLocation } from "@remix-run/react";
 import { useState } from "react";
 import { getShippingOrders } from "../shipping-export.server";
@@ -51,6 +51,8 @@ export default function Index() {
   const { orders } = useLoaderData<typeof loader>();
   const location = useLocation();
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPackingSlips, setIsExportingPackingSlips] = useState(false);
+  const [isExportingBundle, setIsExportingBundle] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [orderInput, setOrderInput] = useState("");
   const [matchedIds, setMatchedIds] = useState<string[]>([]);
@@ -120,36 +122,88 @@ export default function Index() {
     setSelectedIds(matchedIds);
   };
 
+  const getExportQuery = (ids: string[]) => {
+    const params = new URLSearchParams(location.search);
+    ids.forEach((id) => params.append("ids", id));
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  };
+
+  const downloadFile = async (path: string, filename: string) => {
+    const response = await fetch(path);
+    if (!response.ok) throw new Error("Export failed");
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const exportOrders = async (ids: string[]) => {
+    await downloadFile(`/app/export${getExportQuery(ids)}`, "shipping_labels.csv");
+  };
+
+  const exportPackingSlips = async (ids: string[]) => {
+    await downloadFile(
+      `/app/packing-slips${getExportQuery(ids)}`,
+      "packing_slips.pdf",
+    );
+  };
+
+  const handleExport = async () => {
     setIsExporting(true);
 
     try {
-      const params = new URLSearchParams(location.search);
-      ids.forEach((id) => params.append("ids", id));
-      const query = params.toString();
-      const response = await fetch(`/app/export${query ? `?${query}` : ""}`);
-      if (!response.ok) throw new Error("Export failed");
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "shipping_labels.csv";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      await exportOrders(selectedIds);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handleExport = async () => {
-    await exportOrders(selectedIds);
+  const handleExportPackingSlips = async () => {
+    setIsExportingPackingSlips(true);
+
+    try {
+      await exportPackingSlips(selectedIds);
+    } finally {
+      setIsExportingPackingSlips(false);
+    }
   };
 
   const handleExportMatched = async () => {
-    await exportOrders(matchedIds);
+    setIsExporting(true);
+
+    try {
+      await exportOrders(matchedIds);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportMatchedPackingSlips = async () => {
+    setIsExportingPackingSlips(true);
+
+    try {
+      await exportPackingSlips(matchedIds);
+    } finally {
+      setIsExportingPackingSlips(false);
+    }
+  };
+
+  const handleExportMatchedBundle = async () => {
+    setIsExportingBundle(true);
+
+    try {
+      await exportOrders(matchedIds);
+      await exportPackingSlips(matchedIds);
+    } finally {
+      setIsExportingBundle(false);
+    }
   };
 
   return (
@@ -168,6 +222,12 @@ export default function Index() {
                   </Button>
                   <Button variant="primary" onClick={handleExport} loading={isExporting}>
                     Export to CSV ({exportCount})
+                  </Button>
+                  <Button
+                    onClick={handleExportPackingSlips}
+                    loading={isExportingPackingSlips}
+                  >
+                    Export Packing PDF ({exportCount})
                   </Button>
                 </InlineStack>
               </InlineStack>
@@ -201,7 +261,21 @@ export default function Index() {
                     disabled={!canUseMatchedOrders}
                     loading={isExporting}
                   >
-                    导出匹配到的订单
+                    导出匹配地址CSV
+                  </Button>
+                  <Button
+                    onClick={handleExportMatchedPackingSlips}
+                    disabled={!canUseMatchedOrders}
+                    loading={isExportingPackingSlips}
+                  >
+                    导出匹配装箱单PDF
+                  </Button>
+                  <Button
+                    onClick={handleExportMatchedBundle}
+                    disabled={!canUseMatchedOrders}
+                    loading={isExportingBundle}
+                  >
+                    导出CSV+装箱单PDF
                   </Button>
                 </InlineStack>
                 {hasMatched && (

@@ -1,10 +1,10 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 
 import {
-  buildShippingCsv,
-  getShippingOrders,
-  getShippingOrdersByIds,
-} from "../shipping-export.server";
+  buildPackingSlipsPdf,
+  getPackingSlipOrders,
+  getPackingSlipOrdersByIds,
+} from "../packing-slip.server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -13,14 +13,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const selectedIds = url.searchParams.getAll("ids");
   const orders =
     selectedIds.length > 0
-      ? await getShippingOrdersByIds(admin, selectedIds)
-      : await getShippingOrders(admin);
-  const csvContent = buildShippingCsv(orders);
+      ? await getPackingSlipOrdersByIds(admin, selectedIds)
+      : await getPackingSlipOrders(admin);
+  const pdfContent = await buildPackingSlipsPdf(orders);
 
-  return new Response(csvContent, {
+  return new Response(Buffer.from(pdfContent), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": "attachment; filename=\"shipping_labels.csv\"",
+      "Content-Type": "application/pdf",
+      "Content-Disposition": "attachment; filename=\"packing_slips.pdf\"",
       "Cache-Control": "no-store",
     },
   });
