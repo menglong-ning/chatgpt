@@ -19,10 +19,8 @@ import {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const orders = await getShippingOrders(admin);
-  const defaultStoreHandle = session.shop.replace(/\.myshopify\.com$/i, "");
-  const storeHandle = process.env.SHOPIFY_ADMIN_STORE_HANDLE || defaultStoreHandle;
 
-  return { orders, storeHandle };
+  return { orders, shopDomain: session.shop };
 };
 
 const NATIVE_PACKING_SLIP_BATCH_SIZE = 50;
@@ -53,7 +51,7 @@ function parseOrderNames(value: string) {
 }
 
 export default function Index() {
-  const { orders, storeHandle } = useLoaderData<typeof loader>();
+  const { orders, shopDomain } = useLoaderData<typeof loader>();
   const location = useLocation();
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingBundle, setIsExportingBundle] = useState(false);
@@ -177,14 +175,14 @@ export default function Index() {
       index += NATIVE_PACKING_SLIP_BATCH_SIZE
     ) {
       const batch = uniqueNames.slice(index, index + NATIVE_PACKING_SLIP_BATCH_SIZE);
-      const search = batch
-        .map((name) => `name:${name.replace(/^#/, "")}`)
-        .join(" OR ");
-      const params = new URLSearchParams({ query: search });
+      const searchTerms = batch.map((name) => `"${name}"`).join(" OR ");
+      const search = batch.length > 1 ? `(${searchTerms})` : searchTerms;
+      const params = new URLSearchParams({
+        selectedView: "all",
+        query: search,
+      });
 
-      urls.push(
-        `https://admin.shopify.com/store/${storeHandle}/orders?${params.toString()}`,
-      );
+      urls.push(`https://${shopDomain}/admin/orders?${params.toString()}`);
     }
 
     return urls;
