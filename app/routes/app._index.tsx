@@ -17,10 +17,15 @@ import {
 } from "@shopify/polaris";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const orders = await getShippingOrders(admin);
-  return { orders };
+  const defaultStoreHandle = session.shop.replace(/\.myshopify\.com$/i, "");
+  const storeHandle = process.env.SHOPIFY_ADMIN_STORE_HANDLE || defaultStoreHandle;
+
+  return { orders, storeHandle };
 };
+
+const NATIVE_PACKING_SLIP_BATCH_SIZE = 50;
 
 function normalizeDigits(value: string) {
   return value.replace(/[０-９]/g, (char) =>
@@ -48,23 +53,31 @@ function parseOrderNames(value: string) {
 }
 
 export default function Index() {
-  const { orders } = useLoaderData<typeof loader>();
+  const { orders, storeHandle } = useLoaderData<typeof loader>();
   const location = useLocation();
   const [isExporting, setIsExporting] = useState(false);
-  const [isExportingPackingSlips, setIsExportingPackingSlips] = useState(false);
   const [isExportingBundle, setIsExportingBundle] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [orderInput, setOrderInput] = useState("");
   const [matchedIds, setMatchedIds] = useState<string[]>([]);
+  const [matchedOrderNames, setMatchedOrderNames] = useState<string[]>([]);
   const [missingOrderNames, setMissingOrderNames] = useState<string[]>([]);
   const [hasMatched, setHasMatched] = useState(false);
   const [isMatching, setIsMatching] = useState(false);
   const [matchError, setMatchError] = useState("");
 
+  const ordersById = new Map(orders.map((order: any) => [order.id, order]));
   const selectedIdSet = new Set(selectedIds);
   const allSelected = orders.length > 0 && selectedIds.length === orders.length;
   const exportCount = selectedIds.length || orders.length;
   const canUseMatchedOrders = hasMatched && matchedIds.length > 0;
+  const selectedOrders =
+    selectedIds.length > 0
+      ? selectedIds
+          .map((id) => ordersById.get(id))
+          .filter((order): order is (typeof orders)[number] => Boolean(order))
+      : orders;
+  const selectedOrderNames = selectedOrders.map((order: any) => order.name);
 
   const toggleOrder = (id: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -105,11 +118,14 @@ export default function Index() {
       if (!response.ok) throw new Error("Match failed");
 
       const result = await response.json();
-      setMatchedIds(result.orders?.map((order: any) => order.id) || []);
+      const matchedOrders = result.orders || [];
+      setMatchedIds(matchedOrders.map((order: any) => order.id));
+      setMatchedOrderNames(matchedOrders.map((order: any) => order.name));
       setMissingOrderNames(result.missingOrderNames || []);
       setHasMatched(true);
     } catch {
       setMatchedIds([]);
+      setMatchedOrderNames([]);
       setMissingOrderNames(requestedNames);
       setMatchError("匹配失败，请刷新后再试。");
       setHasMatched(true);
@@ -148,11 +164,37 @@ export default function Index() {
     await downloadFile(`/app/export${getExportQuery(ids)}`, "shipping_labels.csv");
   };
 
-  const exportPackingSlips = async (ids: string[]) => {
-    await downloadFile(
-      `/app/packing-slips${getExportQuery(ids)}`,
-      "packing_slips.pdf",
+  const getNativePackingSlipUrls = (orderNames: string[]) => {
+    const uniqueNames = Array.from(
+      new Set(orderNames.map(normalizeOrderName).filter(Boolean)),
     );
+
+    const urls: string[] = [];
+
+    for (
+      let index = 0;
+      index < uniqueNames.length;
+      index += NATIVE_PACKING_SLIP_BATCH_SIZE
+    ) {
+      const batch = uniqueNames.slice(index, index + NATIVE_PACKING_SLIP_BATCH_SIZE);
+      const search = batch
+        .map((name) => `name:${name.replace(/^#/, "")}`)
+        .join(" OR ");
+      const params = new URLSearchParams({ query: search });
+
+      urls.push(
+        `https://admin.shopify.com/store/${storeHandle}/orders?${params.toString()}`,
+      );
+    }
+
+    return urls;
+  };
+
+  const openNativePackingSlips = (orderNames: string[]) => {
+    const urls = getNativePackingSlipUrls(orderNames);
+    urls.forEach((url) => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
   };
 
   const handleExport = async () => {
@@ -165,14 +207,8 @@ export default function Index() {
     }
   };
 
-  const handleExportPackingSlips = async () => {
-    setIsExportingPackingSlips(true);
-
-    try {
-      await exportPackingSlips(selectedIds);
-    } finally {
-      setIsExportingPackingSlips(false);
-    }
+  const handleOpenNativePackingSlips = () => {
+    openNativePackingSlips(selectedOrderNames);
   };
 
   const handleExportMatched = async () => {
@@ -185,22 +221,16 @@ export default function Index() {
     }
   };
 
-  const handleExportMatchedPackingSlips = async () => {
-    setIsExportingPackingSlips(true);
-
-    try {
-      await exportPackingSlips(matchedIds);
-    } finally {
-      setIsExportingPackingSlips(false);
-    }
+  const handleOpenMatchedNativePackingSlips = () => {
+    openNativePackingSlips(matchedOrderNames);
   };
 
   const handleExportMatchedBundle = async () => {
     setIsExportingBundle(true);
+    openNativePackingSlips(matchedOrderNames);
 
     try {
       await exportOrders(matchedIds);
-      await exportPackingSlips(matchedIds);
     } finally {
       setIsExportingBundle(false);
     }
@@ -223,11 +253,8 @@ export default function Index() {
                   <Button variant="primary" onClick={handleExport} loading={isExporting}>
                     Export to CSV ({exportCount})
                   </Button>
-                  <Button
-                    onClick={handleExportPackingSlips}
-                    loading={isExportingPackingSlips}
-                  >
-                    Export Packing PDF ({exportCount})
+                  <Button onClick={handleOpenNativePackingSlips}>
+                    Open Shopify Packing Slips ({exportCount})
                   </Button>
                 </InlineStack>
               </InlineStack>
@@ -264,18 +291,17 @@ export default function Index() {
                     导出匹配地址CSV
                   </Button>
                   <Button
-                    onClick={handleExportMatchedPackingSlips}
+                    onClick={handleOpenMatchedNativePackingSlips}
                     disabled={!canUseMatchedOrders}
-                    loading={isExportingPackingSlips}
                   >
-                    导出匹配装箱单PDF
+                    打开Shopify原生装箱单
                   </Button>
                   <Button
                     onClick={handleExportMatchedBundle}
                     disabled={!canUseMatchedOrders}
                     loading={isExportingBundle}
                   >
-                    导出CSV+装箱单PDF
+                    导出CSV+打开原生装箱单
                   </Button>
                 </InlineStack>
                 {hasMatched && (
