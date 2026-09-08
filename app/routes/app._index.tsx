@@ -23,7 +23,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { orders, shopDomain: session.shop };
 };
 
-const NATIVE_PACKING_SLIP_BATCH_SIZE = 50;
+const NATIVE_PACKING_SLIP_BATCH_SIZE = 30;
 
 function normalizeDigits(value: string) {
   return value.replace(/[０-９]/g, (char) =>
@@ -252,7 +252,7 @@ export default function Index() {
                     Export to CSV ({exportCount})
                   </Button>
                   <Button onClick={handleOpenNativePackingSlips}>
-                    Open Shopify Packing Slips ({exportCount})
+                    Open Shopify Packing Slips ({exportCount}, {NATIVE_PACKING_SLIP_BATCH_SIZE}/batch)
                   </Button>
                 </InlineStack>
               </InlineStack>
@@ -292,14 +292,14 @@ export default function Index() {
                     onClick={handleOpenMatchedNativePackingSlips}
                     disabled={!canUseMatchedOrders}
                   >
-                    打开Shopify原生装箱单
+                    打开Shopify原生装箱单（每批{NATIVE_PACKING_SLIP_BATCH_SIZE}单）
                   </Button>
                   <Button
                     onClick={handleExportMatchedBundle}
                     disabled={!canUseMatchedOrders}
                     loading={isExportingBundle}
                   >
-                    导出CSV+打开原生装箱单
+                    导出CSV+打开原生装箱单（每批{NATIVE_PACKING_SLIP_BATCH_SIZE}单）
                   </Button>
                 </InlineStack>
                 {hasMatched && (
