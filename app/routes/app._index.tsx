@@ -252,7 +252,7 @@ export default function Index() {
                     Export to CSV ({exportCount})
                   </Button>
                   <Button onClick={handleOpenNativePackingSlips}>
-                    Open Shopify Packing Slips ({exportCount}, {NATIVE_PACKING_SLIP_BATCH_SIZE}/batch)
+                    {`Open Shopify Packing Slips (${exportCount}, ${NATIVE_PACKING_SLIP_BATCH_SIZE}/batch)`}
                   </Button>
                 </InlineStack>
               </InlineStack>
@@ -292,14 +292,14 @@ export default function Index() {
                     onClick={handleOpenMatchedNativePackingSlips}
                     disabled={!canUseMatchedOrders}
                   >
-                    打开Shopify原生装箱单（每批{NATIVE_PACKING_SLIP_BATCH_SIZE}单）
+                    {`打开Shopify原生装箱单（每批${NATIVE_PACKING_SLIP_BATCH_SIZE}单）`}
                   </Button>
                   <Button
                     onClick={handleExportMatchedBundle}
                     disabled={!canUseMatchedOrders}
                     loading={isExportingBundle}
                   >
-                    导出CSV+打开原生装箱单（每批{NATIVE_PACKING_SLIP_BATCH_SIZE}单）
+                    {`导出CSV+打开原生装箱单（每批${NATIVE_PACKING_SLIP_BATCH_SIZE}单）`}
                   </Button>
                 </InlineStack>
                 {hasMatched && (
