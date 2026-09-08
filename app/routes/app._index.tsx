@@ -14,6 +14,7 @@ import {
   InlineStack,
   EmptyState,
   TextField,
+  Modal,
 } from "@shopify/polaris";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -24,6 +25,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 const NATIVE_PACKING_SLIP_BATCH_SIZE = 30;
+
+type NativePackingSlipBatch = {
+  url: string;
+  orderCount: number;
+};
 
 function normalizeDigits(value: string) {
   return value.replace(/[０-９]/g, (char) =>
@@ -63,6 +69,9 @@ export default function Index() {
   const [hasMatched, setHasMatched] = useState(false);
   const [isMatching, setIsMatching] = useState(false);
   const [matchError, setMatchError] = useState("");
+  const [nativePackingSlipBatches, setNativePackingSlipBatches] = useState<
+    NativePackingSlipBatch[]
+  >([]);
 
   const ordersById = new Map(orders.map((order: any) => [order.id, order]));
   const selectedIdSet = new Set(selectedIds);
@@ -162,12 +171,12 @@ export default function Index() {
     await downloadFile(`/app/export${getExportQuery(ids)}`, "shipping_labels.csv");
   };
 
-  const getNativePackingSlipUrls = (orderNames: string[]) => {
+  const getNativePackingSlipBatches = (orderNames: string[]) => {
     const uniqueNames = Array.from(
       new Set(orderNames.map(normalizeOrderName).filter(Boolean)),
     );
 
-    const urls: string[] = [];
+    const batches: NativePackingSlipBatch[] = [];
 
     for (
       let index = 0;
@@ -182,17 +191,22 @@ export default function Index() {
         query: search,
       });
 
-      urls.push(`https://${shopDomain}/admin/orders?${params.toString()}`);
+      batches.push({
+        url: `https://${shopDomain}/admin/orders?${params.toString()}`,
+        orderCount: batch.length,
+      });
     }
 
-    return urls;
+    return batches;
   };
 
   const openNativePackingSlips = (orderNames: string[]) => {
-    const urls = getNativePackingSlipUrls(orderNames);
-    urls.forEach((url) => {
-      window.open(url, "_blank", "noopener,noreferrer");
-    });
+    const batches = getNativePackingSlipBatches(orderNames);
+    if (batches.length === 1) {
+      window.open(batches[0].url, "_blank", "noopener,noreferrer");
+    } else {
+      setNativePackingSlipBatches(batches);
+    }
   };
 
   const handleExport = async () => {
@@ -236,6 +250,21 @@ export default function Index() {
 
   return (
     <Page title="Fulfillment Manager">
+      <Modal
+        open={nativePackingSlipBatches.length > 0}
+        onClose={() => setNativePackingSlipBatches([])}
+        title="Shopify原生装箱单"
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            {nativePackingSlipBatches.map((batch, index) => (
+              <Button key={batch.url} url={batch.url} external>
+                {`打开第${index + 1}批（${batch.orderCount}单）`}
+              </Button>
+            ))}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
       <Layout>
         <Layout.Section>
           <Card>
