@@ -258,7 +258,12 @@ export default function Index() {
         <Modal.Section>
           <BlockStack gap="300">
             {nativePackingSlipBatches.map((batch, index) => (
-              <Button key={batch.url} url={batch.url} external>
+              <Button
+                key={batch.url}
+                onClick={() =>
+                  window.open(batch.url, "_blank", "noopener,noreferrer")
+                }
+              >
                 {`打开第${index + 1}批（${batch.orderCount}单）`}
               </Button>
             ))}
